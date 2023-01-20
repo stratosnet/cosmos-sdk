@@ -6,7 +6,7 @@ require (
 	github.com/99designs/keyring v1.1.6
 	github.com/armon/go-metrics v0.4.0
 	github.com/bgentry/speakeasy v0.1.1-0.20220910012023-760eaf8b6816
-	github.com/btcsuite/btcd v0.22.2
+	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/coinbase/rosetta-sdk-go v0.7.0
 	github.com/confio/ics23/go v0.9.0
 	github.com/cosmos/btcutil v1.0.4
@@ -58,11 +58,13 @@ require (
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/btcsuite/btcd v0.22.2 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dgraph-io/badger/v2 v2.2007.2 // indirect
 	github.com/dgraph-io/ristretto v0.0.3 // indirect
