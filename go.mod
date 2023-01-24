@@ -40,7 +40,7 @@ require (
 	github.com/spf13/viper v1.14.0
 	github.com/stretchr/testify v1.8.1
 	github.com/tendermint/go-amino v0.16.0
-	github.com/tendermint/tendermint v0.34.24
+	github.com/tendermint/tendermint v0.34.25-0.20221221220620-936221e0a8d9
 	github.com/tendermint/tm-db v0.6.6
 	github.com/tidwall/btree v1.5.0
 	golang.org/x/crypto v0.4.0
@@ -128,6 +128,8 @@ require (
 replace (
 	// Use cosmos keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
+
+	github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.23.4
 
 	// dgrijalva/jwt-go is deprecated and doesn't receive security updates.
 	// TODO: remove it: https://github.com/cosmos/cosmos-sdk/issues/13134
