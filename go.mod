@@ -12,7 +12,6 @@ require (
 	github.com/cosmos/btcutil v1.0.4
 	github.com/cosmos/go-bip39 v1.0.0
 	github.com/cosmos/iavl v0.19.4
-	github.com/cosmos/ledger-cosmos-go v0.12.2
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.3
 	github.com/golang/mock v1.6.0
@@ -38,6 +37,7 @@ require (
 	github.com/spf13/cobra v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.14.0
+	github.com/stratosnet/ledger-stratos-go v0.0.0-20230728192009-175657d24cb0
 	github.com/stretchr/testify v1.8.1
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tendermint/tendermint v0.34.25-0.20221221220620-936221e0a8d9

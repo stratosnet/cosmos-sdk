@@ -3,7 +3,7 @@
 
 package ledger
 
-import ledger "github.com/cosmos/ledger-cosmos-go"
+import ledger "github.com/stratosnet/ledger-stratos-go"
 
 // If ledger support (build tag) has been enabled, which implies a CGO dependency,
 // set the discoverLedger function which is responsible for loading the Ledger

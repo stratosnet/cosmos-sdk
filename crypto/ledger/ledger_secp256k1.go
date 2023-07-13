@@ -7,22 +7,35 @@ import (
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
-	"github.com/pkg/errors"
-
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	"github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/pkg/errors"
+)
+
+const (
+	SignMode_SIGN_MODE_UNSPECIFIED       = 0
+	SignMode_SIGN_MODE_DIRECT            = 1
+	SignMode_SIGN_MODE_TEXTUAL           = 2
+	SignMode_SIGN_MODE_LEGACY_AMINO_JSON = 127
+	SignMode_SIGN_MODE_EIP_191           = 191
 )
 
 // discoverLedger defines a function to be invoked at runtime for discovering
 // a connected Ledger device.
-var discoverLedger discoverLedgerFn
+var (
+	discoverLedger  discoverLedgerFn
+	pubKeyFactoryFn pubkeyFactory
+	signMode        int32
+)
 
 type (
 	// discoverLedgerFn defines a Ledger discovery function that returns a
 	// connected device or an error upon failure. Its allows a method to avoid CGO
 	// dependencies when Ledger support is potentially not enabled.
 	discoverLedgerFn func() (SECP256K1, error)
+
+	pubkeyFactory func([]byte) types.PubKey
 
 	// SECP256K1 reflects an interface a Ledger API must implement for SECP256K1
 	SECP256K1 interface {
@@ -32,7 +45,7 @@ type (
 		// Returns a compressed pubkey and bech32 address (requires user confirmation)
 		GetAddressPubKeySECP256K1([]uint32, string) ([]byte, string, error)
 		// Signs a message (requires user confirmation)
-		SignSECP256K1([]uint32, []byte) ([]byte, error)
+		SignSECP256K1([]uint32, []byte, int32) ([]byte, error)
 	}
 
 	// PrivKeyLedgerSecp256k1 implements PrivKey, calling the ledger nano we
@@ -45,6 +58,11 @@ type (
 		Path         hd.BIP44Params
 	}
 )
+
+func InitLedger(pkf pubkeyFactory, mode int32) {
+	pubKeyFactoryFn = pkf
+	signMode = mode
+}
 
 // NewPrivKeySecp256k1Unsafe will generate a new key and store the public key for later use.
 //
@@ -79,7 +97,6 @@ func NewPrivKeySecp256k1(path hd.BIP44Params, hrp string) (types.LedgerPrivKey, 
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to recover pubkey: %w", err)
 	}
-
 	return PrivKeyLedgerSecp256k1{pubKey, path}, addr, nil
 }
 
@@ -235,8 +252,14 @@ func sign(device SECP256K1, pkl PrivKeyLedgerSecp256k1, msg []byte) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-
-	sig, err := device.SignSECP256K1(pkl.Path.DerivationPath(), msg)
+	var sig []byte
+	var mode int32
+	if signMode != SignMode_SIGN_MODE_UNSPECIFIED {
+		mode = signMode
+	} else {
+		mode = SignMode_SIGN_MODE_DIRECT
+	}
+	sig, err = device.SignSECP256K1(pkl.Path.DerivationPath(), msg, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +290,10 @@ func getPubKeyUnsafe(device SECP256K1, path hd.BIP44Params) (types.PubKey, error
 	compressedPublicKey := make([]byte, secp256k1.PubKeySize)
 	copy(compressedPublicKey, cmp.SerializeCompressed())
 
-	return &secp256k1.PubKey{Key: compressedPublicKey}, nil
+	if pubKeyFactoryFn == nil {
+		return &secp256k1.PubKey{Key: compressedPublicKey}, nil
+	}
+	return pubKeyFactoryFn(compressedPublicKey), nil
 }
 
 // getPubKeyAddr reads the pubkey and the address from a ledger device.
@@ -290,6 +316,8 @@ func getPubKeyAddrSafe(device SECP256K1, path hd.BIP44Params, hrp string) (types
 
 	compressedPublicKey := make([]byte, secp256k1.PubKeySize)
 	copy(compressedPublicKey, cmp.SerializeCompressed())
-
-	return &secp256k1.PubKey{Key: compressedPublicKey}, addr, nil
+	if pubKeyFactoryFn == nil {
+		return &secp256k1.PubKey{Key: compressedPublicKey}, addr, nil
+	}
+	return pubKeyFactoryFn(compressedPublicKey), addr, nil
 }
