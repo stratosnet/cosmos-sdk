@@ -124,6 +124,12 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 	iterator := k.ValidatorsPowerStoreIterator(ctx)
 	defer iterator.Close()
 
+	type tmpValidator struct {
+		Addr      sdk.ValAddress
+		AddrStr   string
+		Validator types.Validator
+	}
+	validatorList := make([]tmpValidator, 0)
 	for count := 0; iterator.Valid() && count < int(maxValidators); iterator.Next() {
 		// everything that is iterated in this loop is becoming or already a
 		// part of the bonded validator set
@@ -133,7 +139,22 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 		if validator.Jailed {
 			panic("should never retrieve a jailed validator from the power store")
 		}
+		valAddrStr, err := sdk.Bech32ifyAddressBytes(sdk.GetConfig().GetBech32ValidatorAddrPrefix(), valAddr)
+		if err != nil {
+			return nil, err
+		}
+		validatorList = append(validatorList, tmpValidator{
+			Addr:      valAddr,
+			AddrStr:   valAddrStr,
+			Validator: validator,
+		})
+	}
 
+	for _, item := range validatorList {
+
+		valAddr := item.Addr
+		validator := item.Validator
+		valAddrStr := item.AddrStr
 		// if we get to a zero-power validator (which we don't bond),
 		// there are no more possible bonded validators
 		if validator.PotentialConsensusPower(k.PowerReduction(ctx)) == 0 {
@@ -161,10 +182,7 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 		}
 
 		// fetch the old power bytes
-		valAddrStr, err := sdk.Bech32ifyAddressBytes(sdk.GetConfig().GetBech32ValidatorAddrPrefix(), valAddr)
-		if err != nil {
-			return nil, err
-		}
+
 		oldPowerBytes, found := last[valAddrStr]
 		newPower := validator.ConsensusPower(powerReduction)
 		newPowerBytes := k.cdc.MustMarshal(&gogotypes.Int64Value{Value: newPower})
@@ -177,7 +195,6 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 		}
 
 		delete(last, valAddrStr)
-		count++
 
 		totalPower = totalPower.Add(sdk.NewInt(newPower))
 	}
