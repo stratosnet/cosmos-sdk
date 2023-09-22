@@ -149,7 +149,8 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 			Validator: validator,
 		})
 	}
-
+	processed := make(map[string]int)
+	processedIndex := 0
 	for _, item := range validatorList {
 
 		valAddr := item.Addr
@@ -189,9 +190,15 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 
 		// update the validator set if power has changed
 		if !found || !bytes.Equal(oldPowerBytes, newPowerBytes) {
-			updates = append(updates, validator.ABCIValidatorUpdate(powerReduction))
-
 			k.SetLastValidatorPower(ctx, valAddr, newPower)
+
+			if index, found := processed[valAddrStr]; found {
+				updates[index] = validator.ABCIValidatorUpdate(powerReduction)
+			} else {
+				updates = append(updates, validator.ABCIValidatorUpdate(powerReduction))
+				processed[valAddrStr] = processedIndex
+				processedIndex++
+			}
 		}
 
 		delete(last, valAddrStr)
