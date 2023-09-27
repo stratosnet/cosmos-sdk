@@ -419,3 +419,46 @@ func sortNoLongerBonded(last validatorsByAddr) ([][]byte, error) {
 
 	return noLongerBonded, nil
 }
+
+// FixValidatorByPowerIndexRecords because changing the sdk.DefaultPowerReduction at a height without properly update
+// all ValidatorByPowerIndex records. now there are duplicated records for validator joins before the application
+// of sdk.DefaultPowerReduction changes. If those validators become jailed now, jailed validator will be iterated in
+// function ApplyAndReturnValidatorSetUpdates. this function fixed this issue by delete all ValidatorByPowerIndex
+// records and add back only unjailed validator. this function should only be called once whenever
+// sdk.DefaultPowerReduction changes
+func (k Keeper) FixValidatorByPowerIndexRecords(ctx sdk.Context) error {
+	// Iterate over validators, highest power to lowest.
+	iterator := k.ValidatorsPowerStoreIterator(ctx)
+	defer iterator.Close()
+
+	processed := make(map[string]int)
+	processedIndex := 0
+	count := 0
+	for ; iterator.Valid(); iterator.Next() {
+		// everything that is iterated in this loop is becoming or already a
+		// part of the bonded validator set
+		valAddr := sdk.ValAddress(iterator.Value())
+		validator := k.mustGetValidator(ctx, valAddr)
+
+		// delete all ValidatorByPowerIndex records
+		key := iterator.Key()
+		store := ctx.KVStore(k.storeKey)
+		store.Delete(key)
+
+		valAddrStr, err := sdk.Bech32ifyAddressBytes(sdk.GetConfig().GetBech32ValidatorAddrPrefix(), valAddr)
+		if err != nil {
+			count++
+			return err
+		}
+		// add back ValidatorByPowerIndex that never handled
+		if _, found := processed[valAddrStr]; !found {
+			k.SetValidatorByPowerIndex(ctx, validator)
+			processed[valAddrStr] = processedIndex
+			processedIndex++
+		}
+		count++
+	}
+	fmt.Println("total ValidatorByPowerIndex record: ", count)
+	fmt.Println("valid ValidatorByPowerIndex record: ", processedIndex)
+	return nil
+}
