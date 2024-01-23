@@ -11,7 +11,7 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cosmos/gogoproto/jsonpb"
-	proto "github.com/cosmos/gogoproto/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 )
@@ -83,7 +83,7 @@ func TypedEventToEvent(tev proto.Message) (Event, error) {
 		return Event{}, err
 	}
 
-	var attrMap map[string]interface{}
+	var attrMap map[string]json.RawMessage
 	err = json.Unmarshal(evtJSON, &attrMap)
 	if err != nil {
 		return Event{}, err
@@ -94,11 +94,15 @@ func TypedEventToEvent(tev proto.Message) (Event, error) {
 	slices.Sort(keys)
 
 	attrs := make([]abci.EventAttribute, 0, len(attrMap))
+
 	for _, k := range keys {
 		v := attrMap[k]
+		if v[0] == '"' {
+			v = v[1 : len(v)-1]
+		}
 		attrs = append(attrs, abci.EventAttribute{
 			Key:   k,
-			Value: v.(string),
+			Value: string(v),
 		})
 	}
 
