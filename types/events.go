@@ -83,7 +83,7 @@ func TypedEventToEvent(tev proto.Message) (Event, error) {
 		return Event{}, err
 	}
 
-	var attrMap map[string]json.RawMessage
+	var attrMap map[string]interface{}
 	err = json.Unmarshal(evtJSON, &attrMap)
 	if err != nil {
 		return Event{}, err
@@ -98,7 +98,7 @@ func TypedEventToEvent(tev proto.Message) (Event, error) {
 		v := attrMap[k]
 		attrs = append(attrs, abci.EventAttribute{
 			Key:   k,
-			Value: string(v),
+			Value: v.(string),
 		})
 	}
 
