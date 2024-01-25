@@ -83,7 +83,7 @@ func TypedEventToEvent(tev proto.Message) (Event, error) {
 		return Event{}, err
 	}
 
-	var attrMap map[string]json.RawMessage
+	var attrMap map[string]interface{}
 	err = json.Unmarshal(evtJSON, &attrMap)
 	if err != nil {
 		return Event{}, err
@@ -94,15 +94,11 @@ func TypedEventToEvent(tev proto.Message) (Event, error) {
 	slices.Sort(keys)
 
 	attrs := make([]abci.EventAttribute, 0, len(attrMap))
-
 	for _, k := range keys {
 		v := attrMap[k]
-		if v[0] == '"' {
-			v = v[1 : len(v)-1]
-		}
 		attrs = append(attrs, abci.EventAttribute{
 			Key:   k,
-			Value: string(v),
+			Value: fmt.Sprintf("%v", v),
 		})
 	}
 
@@ -131,9 +127,9 @@ func ParseTypedEvent(event abci.Event) (proto.Message, error) {
 		return nil, fmt.Errorf("%q does not implement proto.Message", event.Type)
 	}
 
-	attrMap := make(map[string]json.RawMessage)
+	attrMap := make(map[string]interface{})
 	for _, attr := range event.Attributes {
-		attrMap[attr.Key] = json.RawMessage(attr.Value)
+		attrMap[attr.Key] = attr.Value
 	}
 
 	attrBytes, err := json.Marshal(attrMap)
