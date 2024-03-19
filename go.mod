@@ -27,7 +27,6 @@ require (
 	github.com/cosmos/gogogateway v1.2.0
 	github.com/cosmos/gogoproto v1.4.10
 	github.com/cosmos/iavl v0.20.1
-	github.com/cosmos/ledger-cosmos-go v0.12.4
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.3
 	github.com/google/gofuzz v1.2.0
@@ -53,6 +52,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.14.0
+	github.com/stratosnet/ledger-stratos-go v0.0.0-20230728214905-432bf09f4b6c
 	github.com/stretchr/testify v1.8.4
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tidwall/btree v1.6.0
