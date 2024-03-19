@@ -1,17 +1,20 @@
-# Cosmos SDK v0.47.5 Release Notes
+# Cosmos SDK v0.47.10 Release Notes
 
-💬 [**Release Discussion**](https://github.com/orgs/cosmos/discussions/categories/announcements)
+💬 [**Release Discussion**](https://github.com/orgs/cosmos/discussions/6)
 
 ## 🚀 Highlights
 
-Get ready for v0.50.0 and start integrating with the next [Cosmos SDK](https://github.com/cosmos/cosmos-sdk/releases/tag/v0.50.0-rc.0) release.
+This early monthly patch release fixes [GHSA-86h5-xcpx-cfqc](https://github.com/cosmos/cosmos-sdk/security/advisories/GHSA-86h5-xcpx-cfqc).
 
-For this 5th patch release of the `v0.47.x` line, some of the notable changes include:
+We recommended to upgrade to this patch release as soon as possible.
+When upgrading from <= v0.47.9, please ensure that 2/3 of the validator power upgrade to v0.47.10.
 
-* A new command for importing private keys encoded in hex. This complements the existing `import` command that supports mnemonic and key files.
-  Use `<appd> keys import <name> <hex>` to import a private key encoded in hex.
-* A new command, `rpc.QueryEventForTxCmd` for querying a transaction by its hash and blocking until the transaction is included in a block. It is useful as an alternative to the legacy `--sync block`.
+Curious? Check out the [changelog](https://github.com/cosmos/cosmos-sdk/blob/v0.47.10/CHANGELOG.md) for an exhaustive list of changes or [compare changes](https://github.com/cosmos/cosmos-sdk/compare/v0.47.9...v0.47.10) from last release.
 
-Check out the [changelog](https://github.com/cosmos/cosmos-sdk/blob/v0.47.5/CHANGELOG.md) for an exhaustive list of changes or [compare changes](https://github.com/cosmos/cosmos-sdk/compare/release/v0.47.4...v0.47.5) from last release.
+Refer to the [upgrading guide](https://github.com/cosmos/cosmos-sdk/blob/release/v0.50.x/UPGRADING.md) when migrating from `v0.47.x` to `v0.50.x`.
 
-Refer to the [upgrading guide](https://github.com/cosmos/cosmos-sdk/blob/release/v0.47.x/UPGRADING.md) when migrating from `v0.46.x` to `v0.47.0`.
+## Maintenance Policy
+
+v0.50 has been released which means the v0.47.x line is now supported for bug fixes only, as per our release policy. Earlier versions are not maintained.  
+
+Start integrating with [Cosmos SDK Eden (v0.50)](https://github.com/cosmos/cosmos-sdk/releases/tag/v0.50.5) and enjoy and the new features and performance improvements.
