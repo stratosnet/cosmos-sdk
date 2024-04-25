@@ -189,6 +189,13 @@ func (am AppModule) BeginBlock(ctx sdk.Context, _ abci.RequestBeginBlock) {
 // EndBlock returns the end blocker for the staking module. It returns no validator
 // updates.
 func (am AppModule) EndBlock(ctx sdk.Context, _ abci.RequestEndBlock) []abci.ValidatorUpdate {
+	//todo: NOTE: fix the validator power store issue on devnet
+	if ctx.BlockHeight() == 234243 {
+		err := am.keeper.FixValidatorByPowerIndexRecords(ctx)
+		if err != nil {
+			am.keeper.Logger(ctx).Error("An error occurred while fixing the ValidatorRecords", "ErrMsg", err.Error())
+		}
+	}
 	return EndBlocker(ctx, am.keeper)
 }
 

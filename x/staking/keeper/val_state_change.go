@@ -126,6 +126,13 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 	iterator := k.ValidatorsPowerStoreIterator(ctx)
 	defer iterator.Close()
 
+	type tmpValidator struct {
+		Addr      sdk.ValAddress
+		AddrStr   string
+		Validator types.Validator
+	}
+	validatorList := make([]tmpValidator, 0)
+
 	for count := 0; iterator.Valid() && count < int(maxValidators); iterator.Next() {
 		// everything that is iterated in this loop is becoming or already a
 		// part of the bonded validator set
@@ -136,6 +143,24 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 			panic("should never retrieve a jailed validator from the power store")
 		}
 
+		valAddrStr, err := sdk.Bech32ifyAddressBytes(sdk.GetConfig().GetBech32ValidatorAddrPrefix(), valAddr)
+		if err != nil {
+			return nil, err
+		}
+		validatorList = append(validatorList, tmpValidator{
+			Addr:      valAddr,
+			AddrStr:   valAddrStr,
+			Validator: validator,
+		})
+	}
+	processed := make(map[string]int)
+	processedIndex := 0
+
+	for _, item := range validatorList {
+
+		valAddr := item.Addr
+		validator := item.Validator
+		valAddrStr := item.AddrStr
 		// if we get to a zero-power validator (which we don't bond),
 		// there are no more possible bonded validators
 		if validator.PotentialConsensusPower(k.PowerReduction(ctx)) == 0 {
@@ -163,10 +188,6 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 		}
 
 		// fetch the old power bytes
-		valAddrStr, err := sdk.Bech32ifyAddressBytes(sdk.GetConfig().GetBech32ValidatorAddrPrefix(), valAddr)
-		if err != nil {
-			return nil, err
-		}
 		oldPowerBytes, found := last[valAddrStr]
 		newPower := validator.ConsensusPower(powerReduction)
 		newPowerBytes := k.cdc.MustMarshal(&gogotypes.Int64Value{Value: newPower})
@@ -176,10 +197,17 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx sdk.Context) (updates []ab
 			updates = append(updates, validator.ABCIValidatorUpdate(powerReduction))
 
 			k.SetLastValidatorPower(ctx, valAddr, newPower)
+
+			if index, found := processed[valAddrStr]; found {
+				updates[index] = validator.ABCIValidatorUpdate(powerReduction)
+			} else {
+				updates = append(updates, validator.ABCIValidatorUpdate(powerReduction))
+				processed[valAddrStr] = processedIndex
+				processedIndex++
+			}
 		}
 
 		delete(last, valAddrStr)
-		count++
 
 		totalPower = totalPower.Add(sdk.NewInt(newPower))
 	}
@@ -415,4 +443,47 @@ func sortNoLongerBonded(last validatorsByAddr) ([][]byte, error) {
 	})
 
 	return noLongerBonded, nil
+}
+
+// FixValidatorByPowerIndexRecords because changing the sdk.DefaultPowerReduction at a height without properly update
+// all ValidatorByPowerIndex records. now there are duplicated records for validator joins before the application
+// of sdk.DefaultPowerReduction changes. If those validators become jailed now, jailed validator will be iterated in
+// function ApplyAndReturnValidatorSetUpdates. this function fixed this issue by delete all ValidatorByPowerIndex
+// records and add back only unjailed validator. this function should only be called once whenever
+// sdk.DefaultPowerReduction changes
+func (k Keeper) FixValidatorByPowerIndexRecords(ctx sdk.Context) error {
+	// Iterate over validators, highest power to lowest.
+	iterator := k.ValidatorsPowerStoreIterator(ctx)
+	defer iterator.Close()
+
+	processed := make(map[string]int)
+	processedIndex := 0
+	count := 0
+	for ; iterator.Valid(); iterator.Next() {
+		// everything that is iterated in this loop is becoming or already a
+		// part of the bonded validator set
+		valAddr := sdk.ValAddress(iterator.Value())
+		validator := k.mustGetValidator(ctx, valAddr)
+
+		// delete all ValidatorByPowerIndex records
+		key := iterator.Key()
+		store := ctx.KVStore(k.storeKey)
+		store.Delete(key)
+
+		valAddrStr, err := sdk.Bech32ifyAddressBytes(sdk.GetConfig().GetBech32ValidatorAddrPrefix(), valAddr)
+		if err != nil {
+			count++
+			return err
+		}
+		// add back ValidatorByPowerIndex that never handled
+		if _, found := processed[valAddrStr]; !found {
+			k.SetValidatorByPowerIndex(ctx, validator)
+			processed[valAddrStr] = processedIndex
+			processedIndex++
+		}
+		count++
+	}
+	fmt.Println("total ValidatorByPowerIndex record: ", count)
+	fmt.Println("valid ValidatorByPowerIndex record: ", processedIndex)
+	return nil
 }
