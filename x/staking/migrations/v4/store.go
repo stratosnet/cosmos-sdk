@@ -1,8 +1,10 @@
 package v4
 
 import (
+	"fmt"
 	"sort"
 
+	sdkmath "cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/codec"
 	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -21,6 +23,11 @@ func MigrateStore(ctx sdk.Context, storeKey storetypes.StoreKey, cdc codec.Binar
 
 	// migrate unbonding delegations
 	if err := migrateUBDEntries(ctx, store, cdc, legacySubspace); err != nil {
+		return err
+	}
+
+	// migrate validator power store
+	if err := migrateValidatorsPowerStore(ctx, store, cdc); err != nil {
 		return err
 	}
 
@@ -97,4 +104,56 @@ func setUBDToStore(ctx sdk.Context, store storetypes.KVStore, cdc codec.BinaryCo
 	key := types.GetUBDKey(delegatorAddress, addr)
 
 	store.Set(key, bz)
+}
+
+// FixValidatorByPowerIndexRecords because changing the sdk.DefaultPowerReduction at a height without properly update
+// all ValidatorByPowerIndex records. now there are duplicated records for validator joins before the application
+// of sdk.DefaultPowerReduction changes. If those validators become jailed now, jailed validator will be iterated in
+// function ApplyAndReturnValidatorSetUpdates. this function fixed this issue by delete all ValidatorByPowerIndex
+// records and add back only unjailed validator. this function should only be called once whenever
+// sdk.DefaultPowerReduction changes
+func migrateValidatorsPowerStore(ctx sdk.Context, store storetypes.KVStore, cdc codec.BinaryCodec) error {
+	newPowerReduction := sdkmath.NewInt(1e15)
+
+	// Iterate over validators, highest power to lowest.
+	iterator := sdk.KVStoreReversePrefixIterator(store, types.ValidatorsByPowerIndexKey)
+	defer iterator.Close()
+
+	processed := make(map[string]int)
+	processedIndex := 0
+	count := 0
+	for ; iterator.Valid(); iterator.Next() {
+		// everything that is iterated in this loop is becoming or already a
+		// part of the bonded validator set
+		valAddr := sdk.ValAddress(iterator.Value())
+		valBz := store.Get(types.GetValidatorKey(valAddr))
+		if valBz == nil {
+			panic(fmt.Sprintf("validator record not found for address: %X\n", valAddr))
+		}
+		validator := types.MustUnmarshalValidator(cdc, valBz)
+
+		// delete all ValidatorByPowerIndex records
+		key := iterator.Key()
+		store.Delete(key)
+
+		valAddrStr, err := sdk.Bech32ifyAddressBytes(sdk.GetConfig().GetBech32ValidatorAddrPrefix(), valAddr)
+		if err != nil {
+			count++
+			return err
+		}
+		// add back ValidatorByPowerIndex that never handled
+		if _, found := processed[valAddrStr]; !found {
+			// jailed validators are not kept in the power index
+			if validator.Jailed {
+				continue
+			}
+			store.Set(types.GetValidatorsByPowerIndexKey(validator, newPowerReduction), validator.GetOperator())
+			processed[valAddrStr] = processedIndex
+			processedIndex++
+		}
+		count++
+	}
+	fmt.Println("total ValidatorByPowerIndex record: ", count)
+	fmt.Println("valid ValidatorByPowerIndex record: ", processedIndex)
+	return nil
 }
