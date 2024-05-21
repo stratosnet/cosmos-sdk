@@ -6,12 +6,20 @@ import (
 	"math/big"
 	"os"
 
-	btcec "github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	"github.com/cosmos/cosmos-sdk/crypto/types"
+)
+
+const (
+	SignMode_SIGN_MODE_UNSPECIFIED       = 0
+	SignMode_SIGN_MODE_DIRECT            = 1
+	SignMode_SIGN_MODE_TEXTUAL           = 2
+	SignMode_SIGN_MODE_LEGACY_AMINO_JSON = 127
+	SignMode_SIGN_MODE_EIP_191           = 191
 )
 
 // options stores the Ledger Options that can be used to customize Ledger usage
@@ -22,6 +30,8 @@ type (
 	// connected device or an error upon failure. Its allows a method to avoid CGO
 	// dependencies when Ledger support is potentially not enabled.
 	discoverLedgerFn func() (SECP256K1, error)
+
+	pubKeyFactoryFn func([]byte) types.PubKey
 
 	// createPubkeyFn supports returning different public key types that implement
 	// types.PubKey
@@ -35,7 +45,7 @@ type (
 		// Returns a compressed pubkey and bech32 address (requires user confirmation)
 		GetAddressPubKeySECP256K1([]uint32, string) ([]byte, string, error)
 		// Signs a message (requires user confirmation)
-		SignSECP256K1([]uint32, []byte) ([]byte, error)
+		SignSECP256K1([]uint32, []byte, int32) ([]byte, error)
 	}
 
 	// Options hosts customization options to account for differences in Ledger
@@ -45,6 +55,8 @@ type (
 		createPubkey      createPubkeyFn
 		appName           string
 		skipDERConversion bool
+		pubKeyFactoryFn   pubKeyFactoryFn
+		signMode          int32
 	}
 
 	// PrivKeyLedgerSecp256k1 implements PrivKey, calling the ledger nano we
@@ -65,6 +77,19 @@ func initOptionsDefault() {
 	}
 	options.appName = "Cosmos"
 	options.skipDERConversion = false
+}
+
+func InitLedger(pkf pubKeyFactoryFn, mode int32) {
+	options.pubKeyFactoryFn = pkf
+	options.signMode = mode
+}
+
+func SetPubKeyFactoryFn(fn pubKeyFactoryFn) {
+	options.pubKeyFactoryFn = fn
+}
+
+func SetSignMode(mode int32) {
+	options.signMode = mode
 }
 
 // Set the discoverLedger function to use a different Ledger derivation
@@ -275,7 +300,14 @@ func sign(device SECP256K1, pkl PrivKeyLedgerSecp256k1, msg []byte) ([]byte, err
 		return nil, err
 	}
 
-	sig, err := device.SignSECP256K1(pkl.Path.DerivationPath(), msg)
+	var sig []byte
+	var mode int32
+	if options.signMode != SignMode_SIGN_MODE_UNSPECIFIED {
+		mode = options.signMode
+	} else {
+		mode = SignMode_SIGN_MODE_DIRECT
+	}
+	sig, err = device.SignSECP256K1(pkl.Path.DerivationPath(), msg, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +342,10 @@ func getPubKeyUnsafe(device SECP256K1, path hd.BIP44Params) (types.PubKey, error
 	compressedPublicKey := make([]byte, secp256k1.PubKeySize)
 	copy(compressedPublicKey, cmp.SerializeCompressed())
 
-	return options.createPubkey(compressedPublicKey), nil
+	if options.pubKeyFactoryFn == nil {
+		return options.createPubkey(compressedPublicKey), nil
+	}
+	return options.pubKeyFactoryFn(compressedPublicKey), nil
 }
 
 // getPubKeyAddr reads the pubkey and the address from a ledger device.
@@ -334,5 +369,8 @@ func getPubKeyAddrSafe(device SECP256K1, path hd.BIP44Params, hrp string) (types
 	compressedPublicKey := make([]byte, secp256k1.PubKeySize)
 	copy(compressedPublicKey, cmp.SerializeCompressed())
 
-	return options.createPubkey(compressedPublicKey), addr, nil
+	if options.pubKeyFactoryFn == nil {
+		return options.createPubkey(compressedPublicKey), addr, nil
+	}
+	return options.pubKeyFactoryFn(compressedPublicKey), addr, nil
 }

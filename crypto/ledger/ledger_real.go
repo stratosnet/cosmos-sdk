@@ -4,7 +4,7 @@
 package ledger
 
 import (
-	ledger "github.com/cosmos/ledger-cosmos-go"
+	ledger "github.com/stratosnet/ledger-stratos-go"
 )
 
 // If ledger support (build tag) has been enabled, which implies a CGO dependency,
