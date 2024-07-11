@@ -1,9 +1,11 @@
 package unknownproto
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cosmos/gogoproto/jsonpb"
 	"github.com/cosmos/gogoproto/proto"
@@ -33,6 +35,9 @@ func RejectUnknownFieldsAndFixTypeUrl(bz []byte, msg proto.Message, allowUnknown
 	if err != nil {
 		return hasUnknownNonCriticals, nil, err
 	}
+
+	currentBzOffset := 0
+	var updatedBz []byte
 
 	for len(bz) > 0 {
 		tagNum, wireType, m := protowire.ConsumeTag(bz)
@@ -70,6 +75,13 @@ func RejectUnknownFieldsAndFixTypeUrl(bz []byte, msg proto.Message, allowUnknown
 			}
 		}
 
+		/**
+		tagNum,wireType: bz[:m]
+		fieldBytes: bz[m:n]
+		OtherFieldBytes: bz[n:]
+		*/
+		newBz = append(newBz[:currentBzOffset], bz[:m]...) //append: tagNum,wireType
+
 		// Skip over the bytes that store fieldNumber and wireType bytes.
 		bz = bz[m:]
 		n := protowire.ConsumeFieldValue(tagNum, wireType, bz)
@@ -78,11 +90,15 @@ func RejectUnknownFieldsAndFixTypeUrl(bz []byte, msg proto.Message, allowUnknown
 				tagNum, wireTypeToString(wireType), protowire.ParseError(n))
 			return hasUnknownNonCriticals, nil, err
 		}
+
+		newBz = append(newBz, bz[:n]...) //append: original fieldBytes
+
 		fieldBytes := bz[:n]
 		bz = bz[n:]
 
 		// An unknown but non-critical field or just a scalar type (aka *INT and BYTES like).
 		if fieldDescProto == nil || fieldDescProto.IsScalar() {
+			currentBzOffset = currentBzOffset + m + n
 			continue
 		}
 
@@ -90,12 +106,14 @@ func RejectUnknownFieldsAndFixTypeUrl(bz []byte, msg proto.Message, allowUnknown
 		if protoMessageName == "" {
 			switch typ := fieldDescProto.GetType(); typ {
 			case descriptor.FieldDescriptorProto_TYPE_STRING, descriptor.FieldDescriptorProto_TYPE_BYTES:
+
 				// At this point only TYPE_STRING is expected to be unregistered, since FieldDescriptorProto.IsScalar() returns false for
 				// TYPE_BYTES and TYPE_STRING as per
 				// https://github.com/cosmos/gogoproto/blob/5628607bb4c51c3157aacc3a50f0ab707582b805/protoc-gen-gogo/descriptor/descriptor.go#L95-L118
 			default:
 				return hasUnknownNonCriticals, nil, fmt.Errorf("failed to get typename for message of type %v, can only be TYPE_STRING or TYPE_BYTES", typ)
 			}
+			currentBzOffset = currentBzOffset + m + n
 			continue
 		}
 
@@ -103,6 +121,7 @@ func RejectUnknownFieldsAndFixTypeUrl(bz []byte, msg proto.Message, allowUnknown
 
 		// consume length prefix of nested message
 		_, o := protowire.ConsumeVarint(fieldBytes)
+		fieldBytesLengthPrefix := fieldBytes[:o]
 		fieldBytes = fieldBytes[o:]
 
 		var msg proto.Message
@@ -121,6 +140,35 @@ func RejectUnknownFieldsAndFixTypeUrl(bz []byte, msg proto.Message, allowUnknown
 				return hasUnknownNonCriticals, nil, err
 			}
 			protoMessageName = any.TypeUrl
+			//update type-url
+			if any.TypeUrl == "/stratos.register.v1.MsgCreateResourceNode" ||
+				any.TypeUrl == "/stratos.register.v1.MsgUpdateResourceNode" ||
+				any.TypeUrl == "/stratos.register.v1.MsgCreateMetaNode" ||
+				any.TypeUrl == "/stratos.register.v1.MsgUpdateMetaNode" {
+				any.TypeUrl = strings.Replace(protoMessageName, "v1", "v1_1", 1)
+				protoMessageName = any.TypeUrl
+
+				//re-marshal to bytes with changed typeUrl
+				newFieldBytesWithTypeUrl, err := proto.Marshal(any)
+				if err != nil {
+					return hasUnknownNonCriticals, nil, err
+				}
+				// repack with length prefix
+				var sizeBuf [binary.MaxVarintLen64]byte
+				num := binary.PutUvarint(sizeBuf[:], uint64(any.Size()))
+				repackedBzWithLengthPrefix := append(sizeBuf[:num], newFieldBytesWithTypeUrl...)
+				n = len(repackedBzWithLengthPrefix)
+
+				// consume length prefix of nested message
+				_, o = protowire.ConsumeVarint(repackedBzWithLengthPrefix)
+				fieldBytesLengthPrefix = repackedBzWithLengthPrefix[:o]
+				fieldBytes = repackedBzWithLengthPrefix[o:]
+			}
+
+			updatedBz = append(fieldBytesLengthPrefix, fieldBytes...)
+			updatedBz = append(fieldBytesLengthPrefix, fieldBytes...)
+			newBz = append(newBz[:currentBzOffset+m], updatedBz...) // replace fieldBytes & following bytes
+
 			fieldBytes = any.Value
 			msg, err = resolver.Resolve(protoMessageName)
 			if err != nil {
@@ -138,7 +186,9 @@ func RejectUnknownFieldsAndFixTypeUrl(bz []byte, msg proto.Message, allowUnknown
 		if err != nil {
 			return hasUnknownNonCriticals, nil, err
 		}
+
+		currentBzOffset = currentBzOffset + m + n
 	}
 
-	return hasUnknownNonCriticals, nil, nil
+	return hasUnknownNonCriticals, newBz, nil
 }

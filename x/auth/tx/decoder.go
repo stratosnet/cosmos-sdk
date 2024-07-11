@@ -39,7 +39,13 @@ func DefaultTxDecoder(cdc codec.ProtoCodecMarshaler) sdk.TxDecoder {
 		// allow non-critical unknown fields in TxBody
 		txBodyHasUnknownNonCriticals, err := unknownproto.RejectUnknownFields(raw.BodyBytes, &body, true, cdc.InterfaceRegistry())
 		if err != nil {
-			return nil, sdkerrors.Wrap(sdkerrors.ErrTxDecode, err.Error())
+			// ST-365: retry and replace type-url if it is a valid stratos msg
+			var newBodyBytes []byte
+			txBodyHasUnknownNonCriticals, newBodyBytes, err = unknownproto.RejectUnknownFieldsAndFixTypeUrl(raw.BodyBytes, &body, true, cdc.InterfaceRegistry())
+			if err != nil {
+				return nil, sdkerrors.Wrap(sdkerrors.ErrTxDecode, err.Error())
+			}
+			raw.BodyBytes = newBodyBytes
 		}
 
 		err = cdc.Unmarshal(raw.BodyBytes, &body)
